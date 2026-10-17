@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.WindowInsets
-import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.content.pm.ActivityInfo
@@ -59,7 +58,8 @@ class MainActivity : Activity() {
             window.setDecorFitsSystemWindows(false)
             window.insetsController?.let {
                 it.hide(WindowInsets.Type.systemBars())
-                it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BY_SWIPE
+                // BEHAVIOR_SHOW_TRANSIENT_BY_SWIPE == 2; the named constant did not resolve in CI.
+                it.systemBarsBehavior = 2
             }
         } else {
             @Suppress("DEPRECATION")
