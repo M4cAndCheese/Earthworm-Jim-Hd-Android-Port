@@ -1,0 +1,167 @@
+name: Build game APK (private)
+
+# Private repo only. Runs codegen on the game data, copies the generated code
+# into the public port (M4cAndCheese/Earthworm-Jim-Hd-Android-Port) and builds the
+# playable debug APK. The game data is never put into the APK.
+# The APK is an artifact of this private repo, so it is not public.
+
+on:
+  workflow_dispatch:
+    inputs:
+      port_ref:
+        description: "Branch, tag or SHA of the public port to build"
+        required: false
+        default: "main"
+        type: string
+  push:
+    paths:
+      - "ewj/**"
+      - "tools/**"
+      - ".github/workflows/build-game-apk.yml"
+      - ".github/workflows/codegen.yml"
+
+permissions:
+  contents: read
+
+env:
+  GAME_TAG: game-data-v1
+  SDK_TAG: sdk-rexglue-0.10.0
+  SDK_REPO: M4cAndCheese/Earthworm-Jim-Hd-Android-Port
+  PORT_REPO: M4cAndCheese/Earthworm-Jim-Hd-Android-Port
+  # default.xex of ReXGlue's supported build (version 1.0.0.11)
+  DEFAULT_XEX_SHA1: 62d9d28a3bce42843607c26ab4b200e91cb31203
+  NDK_VERSION: 28.2.13676358
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+
+    steps:
+      - name: Checkout this private repo (ewj/ and tools/)
+        uses: actions/checkout@v5
+        with:
+          path: game
+
+      - name: Checkout the public port
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.PORT_REPO }}
+          ref: ${{ inputs.port_ref || 'main' }}
+          path: port
+
+      - name: Make sure the port has the current build files
+        # The port on main may lag behind the fixes in the repo: apply them here so
+        # the private build does not depend on the last push to main.
+        run: |
+          python3 - <<'PY'
+          import os, re, pathlib
+          gradle = pathlib.Path("port/app/build.gradle.kts")
+          s = gradle.read_text(encoding="utf-8")
+          if re.search(r"sourceSets\.main\s*\{", s):
+              s = re.sub(r"sourceSets\.main\s*\{[^}]*\}", "", s)
+              print("build.gradle.kts: removed old sourceSets.main block")
+          if 'android.sourceSets.getByName("main")' not in s:
+              s = s.rstrip() + '\n\nandroid.sourceSets.getByName("main").jniLibs.srcDir("libs")\n'
+              print("build.gradle.kts: added android.sourceSets line")
+          gradle.write_text(s, encoding="utf-8")
+          old_main = pathlib.Path("port/app/src/main/java/com/ewj/hd/MainActivity.kt")
+          if old_main.exists():
+              old_main.unlink()
+              print("removed MainActivity.kt (does not compile, not in manifest)")
+          PY
+
+      - name: Download game data from private release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: game
+        run: |
+          gh release download "$GAME_TAG" --repo "${{ github.repository }}" --pattern game-data.zip --dir .
+          mkdir -p ewj/assets
+          unzip -q game-data.zip -d ewj/assets
+          rm game-data.zip
+          echo "$DEFAULT_XEX_SHA1  ewj/assets/default.xex" | sha1sum -c -
+
+      - name: Download ReXGlue host SDK (official Linux x86_64 build)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: game
+        run: |
+          gh release download "$SDK_TAG" --repo "$SDK_REPO" --pattern '*linux*' --dir sdk
+          mkdir -p sdk/host
+          for z in sdk/*.zip; do unzip -q "$z" -d sdk/host; done
+          REXGLUE=$(find sdk/host -name rexglue -type f | head -n 1)
+          chmod +x "$REXGLUE"
+          echo "REXGLUE=$PWD/$REXGLUE" >> "$GITHUB_ENV"
+          LIBDIR=$(dirname "$(find sdk/host -name librexruntime.so | head -n 1)")
+          echo "LD_LIBRARY_PATH=$PWD/$LIBDIR" >> "$GITHUB_ENV"
+
+      - name: Run codegen
+        working-directory: game/ewj
+        run: |
+          "$REXGLUE" codegen earthworm_jim_hd_manifest.toml
+          test -n "$(find generated/default -name '*.cpp' | head -n 1)"
+          test -f generated/rexglue.cmake || { echo "rexglue.cmake missing"; find generated -maxdepth 2; exit 1; }
+
+      - name: Patch setjmp/longjmp call sites
+        working-directory: game
+        run: |
+          cmake "-DGENERATED=$PWD/ewj/generated/default" -P tools/patch_setjmp.cmake
+
+      - name: Copy generated code into the port
+        run: |
+          DEST=port/app/src/main/cpp/generated
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+          cp -r game/ewj/generated/. "$DEST/"
+          test -f "$DEST/default/sources.cmake"
+
+      - name: Install SDK, NDK and CMake
+        run: |
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" "build-tools;35.0.0" \
+            "ndk;$NDK_VERSION" "cmake;3.31.6"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Fetch SDL Java glue (SDK commit)
+        working-directory: port
+        run: sh tools/fetch-sdl-java.sh
+
+      - name: Fetch ReXGlue Android SDK
+        working-directory: port
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "$SDK_TAG" --repo "$SDK_REPO" --pattern 'rexglue-android-arm64-sdk.zip' --dir .
+          mkdir sdk-android
+          unzip -q rexglue-android-arm64-sdk.zip -d sdk-android
+
+      - name: Stage runtime libraries
+        working-directory: port
+        run: sh tools/stage-sdk.sh sdk-android "$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.10.2
+
+      - name: Build game debug APK
+        working-directory: port
+        env:
+          REXSDK_ANDROID_DIR: ${{ github.workspace }}/port/sdk-android
+          REXGLUE_HOST_TOOL: ${{ env.REXGLUE }}
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: EarthwormJimHD-game-debug-apk
+          path: port/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+          if-no-files-found: error
