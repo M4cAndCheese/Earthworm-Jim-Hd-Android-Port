@@ -1,56 +1,108 @@
+// Touch controls: the Java-side overlay (TouchOverlay) sends its state here, and it
+// is fed to an SDL3 virtual gamepad. The runtime's SDL input driver picks the pad
+// up, so the game sees an ordinary controller.
+//
+// EWJ_HAS_SDK is defined when the game is built (see CMakeLists.txt). Without it
+// (no generated game code) these functions do nothing.
 #include <jni.h>
-#include <android/log.h>
-#include <android/native_window_jni.h>
-#include <atomic>
 
-#define LOG_TAG "EWJ"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#include <algorithm>
+#include <chrono>
+#include <mutex>
+#include <thread>
+
+#if defined(EWJ_HAS_SDK)
+#include <SDL3/SDL.h>
+#endif
 
 namespace {
-std::atomic<float> g_lx{0.0f};
-std::atomic<float> g_ly{0.0f};
-std::atomic<int> g_buttons{0};
-std::atomic<int> g_vp_x{0}, g_vp_y{0}, g_vp_w{0}, g_vp_h{0};
-ANativeWindow* g_window = nullptr;
+
+std::mutex g_mutex;
+
+#if defined(EWJ_HAS_SDK)
+SDL_Joystick* g_pad = nullptr;
+SDL_JoystickID g_pad_id = 0;
+
+// Must hold g_mutex. The joystick subsystem is started by the runtime, so the pad
+// is attached lazily, once SDL is up.
+bool EnsurePad() {
+  if (g_pad) {
+    return true;
+  }
+  if (!SDL_WasInit(SDL_INIT_JOYSTICK)) {
+    return false;
+  }
+  SDL_VirtualJoystickDesc desc;
+  SDL_INIT_INTERFACE(&desc);
+  desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+  desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
+  desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+  desc.name = "Earthworm Jim touch controls";
+  SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);
+  if (!id) {
+    return false;
+  }
+  g_pad = SDL_OpenJoystick(id);
+  if (!g_pad) {
+    SDL_DetachVirtualJoystick(id);
+    return false;
+  }
+  g_pad_id = id;
+  return true;
+}
+
+void SetButton(int button, bool down) {
+  if (g_pad) {
+    SDL_SetJoystickVirtualButton(g_pad, button, down);
+  }
+}
+
+Sint16 ToAxis(float value) {
+  return static_cast<Sint16>(std::clamp(value, -1.0f, 1.0f) * 32767.0f);
+}
+#endif
+
 }  // namespace
 
 extern "C" {
 
-JNIEXPORT jboolean JNICALL
-Java_com_ewj_hd_NativeBridge_start(JNIEnv* env, jobject, jobject surface) {
-    g_window = ANativeWindow_fromSurface(env, surface);
-    LOGI("start: window=%p", static_cast<void*>(g_window));
-    // TODO: create the Vulkan surface and start the game runtime here.
-    return g_window ? JNI_TRUE : JNI_FALSE;
-}
-
-JNIEXPORT void JNICALL
-Java_com_ewj_hd_NativeBridge_stop(JNIEnv*, jobject) {
-    if (g_window) {
-        ANativeWindow_release(g_window);
-        g_window = nullptr;
-    }
-    LOGI("stop");
-}
-
+// lx, ly in [-1, 1] (ly positive = up). buttons: bit0 = A, bit1 = B, bit2 = X.
 JNIEXPORT void JNICALL
 Java_com_ewj_hd_NativeBridge_setPad(JNIEnv*, jobject, jfloat lx, jfloat ly, jint buttons) {
-    g_lx.store(lx);
-    g_ly.store(ly);
-    g_buttons.store(buttons);
+#if defined(EWJ_HAS_SDK)
+  std::lock_guard lock(g_mutex);
+  if (!EnsurePad()) {
+    return;
+  }
+  SDL_SetJoystickVirtualAxis(g_pad, SDL_GAMEPAD_AXIS_LEFTX, ToAxis(lx));
+  SDL_SetJoystickVirtualAxis(g_pad, SDL_GAMEPAD_AXIS_LEFTY, ToAxis(-ly));  // SDL: y grows down
+  SetButton(SDL_GAMEPAD_BUTTON_SOUTH, (buttons & 1) != 0);  // A
+  SetButton(SDL_GAMEPAD_BUTTON_EAST, (buttons & 2) != 0);   // B
+  SetButton(SDL_GAMEPAD_BUTTON_WEST, (buttons & 4) != 0);   // X
+#else
+  (void)lx;
+  (void)ly;
+  (void)buttons;
+#endif
 }
 
-JNIEXPORT void JNICALL
-Java_com_ewj_hd_NativeBridge_setViewport(JNIEnv*, jobject, jint x, jint y, jint w, jint h) {
-    g_vp_x.store(x);
-    g_vp_y.store(y);
-    g_vp_w.store(w);
-    g_vp_h.store(h);
-}
-
+// Presses Start for a moment (the game's pause).
 JNIEXPORT void JNICALL
 Java_com_ewj_hd_NativeBridge_setPause(JNIEnv*, jobject) {
-    LOGI("pause requested");
+#if defined(EWJ_HAS_SDK)
+  std::thread([] {
+    {
+      std::lock_guard lock(g_mutex);
+      if (!EnsurePad()) {
+        return;
+      }
+      SetButton(SDL_GAMEPAD_BUTTON_START, true);
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+    std::lock_guard lock(g_mutex);
+    SetButton(SDL_GAMEPAD_BUTTON_START, false);
+  }).detach();
+#endif
 }
 
 }  // extern "C"

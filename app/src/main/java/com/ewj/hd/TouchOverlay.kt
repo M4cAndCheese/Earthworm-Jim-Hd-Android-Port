@@ -12,12 +12,9 @@ import kotlin.math.sqrt
 /**
  * On-screen controls: a virtual stick at bottom-left, three action buttons at
  * bottom-right and a pause button at top-right, laid out like the reference
- * screenshot. Multi-touch aware: each finger is tracked by its pointer id.
+ * screenshot. Each finger is tracked by its pointer id.
  */
 class TouchOverlay(context: Context) : View(context) {
-
-    var onPadChanged: ((lx: Float, ly: Float, buttons: Int) -> Unit)? = null
-    var onPause: (() -> Unit)? = null
 
     private class ActionButton(val label: String, val bit: Int, val fx: Float, val fy: Float) {
         var cx = 0f
@@ -113,7 +110,7 @@ class TouchOverlay(context: Context) : View(context) {
 
     private fun onDown(id: Int, x: Float, y: Float) {
         if (inPause(x, y)) {
-            onPause?.invoke()
+            NativeBridge.setPause()
             return
         }
         val b = buttonAt(x, y)
@@ -144,14 +141,12 @@ class TouchOverlay(context: Context) : View(context) {
         val dy = (y - stickCy) / stickR
         val mag = sqrt(dx * dx + dy * dy)
         val scale = if (mag > 1f) 1f / mag else 1f
-        val nx = dx * scale
-        val ny = dy * scale
         if (mag < DEADZONE) {
             lx = 0f
             ly = 0f
         } else {
-            lx = nx
-            ly = -ny // screen y grows downward; game y grows upward
+            lx = dx * scale
+            ly = -(dy * scale) // screen y grows downward; game y grows upward
         }
         notifyPad()
     }
@@ -161,7 +156,7 @@ class TouchOverlay(context: Context) : View(context) {
     }
 
     private fun notifyPad() {
-        onPadChanged?.invoke(lx, ly, mask)
+        NativeBridge.setPad(lx, ly, mask)
         invalidate()
     }
 

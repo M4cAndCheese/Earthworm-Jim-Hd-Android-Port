@@ -1,5 +1,8 @@
 name: Build Android APK
 
+# Public build: the app without game code. The playable APK (with the game) is
+# built in the private repo, ewj-game-private, by build-game-apk.yml.
+
 on:
   push:
     branches: [main, master]
@@ -24,14 +27,25 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # The GitHub Ubuntu runner already ships the Android SDK (ANDROID_SDK_ROOT).
-      # android-actions/setup-android@v3 failed on 'sdkmanager tools', so it is not used.
       - name: Install SDK, NDK and CMake
         run: |
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
-            "platforms;android-36" "build-tools;36.0.0" \
-            "ndk;27.0.12077973" "cmake;3.22.1"
+            "platforms;android-35" "build-tools;35.0.0" \
+            "ndk;28.2.13676358" "cmake;3.31.6"
+
+      - name: Fetch SDL 3.5.0 Java glue
+        run: sh tools/fetch-sdl-java.sh
+
+      - name: Fetch ReXGlue Android SDK
+        run: |
+          curl -fL -o rexglue-android.zip \
+            "https://github.com/M4cAndCheese/Earthworm-Jim-Hd-Android-Port/releases/download/sdk-rexglue-0.10.0/rexglue-android-arm64-sdk.zip"
+          mkdir sdk-android
+          unzip -q rexglue-android.zip -d sdk-android
+
+      - name: Stage runtime libraries
+        run: sh tools/stage-sdk.sh sdk-android "$ANDROID_SDK_ROOT/ndk/28.2.13676358"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -39,6 +53,8 @@ jobs:
           gradle-version: 8.10.2
 
       - name: Build debug APK
+        env:
+          REXSDK_ANDROID_DIR: ${{ github.workspace }}/sdk-android
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Upload APK

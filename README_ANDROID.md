@@ -1,53 +1,40 @@
-# Earthworm Jim HD - Android (scaffold)
+# Earthworm Jim HD - Android
 
-Estado: esqueleto del proyecto. Compila como app Android con el nombre
-"Earthworm Jim HD", pero NO ejecuta el juego todavía. El motor (ReXGlue
-para Android + código recompilado) no existe en este repo.
+Port of Earthworm Jim HD (Xbox 360 XBLA) to Android with ReXGlue 0.10.0 (Vulkan),
+on the Poco X8 Pro Max (Mali-G925).
 
-## Dispositivo objetivo
-Poco X8 Pro Max: MediaTek Dimensity 9500s, GPU Immortalis-G925 (Mali,
-Valhall), Android 16, pantalla 6.83" 1280x2772 19.5:9 a 120 Hz.
+## Layout
+- `app/src/main/java/com/ewj/hd/EwjActivity.java`: `SDLActivity` runs the game.
+- `app/src/main/java/com/ewj/hd/TouchOverlay.kt`: on-screen stick and buttons.
+- `app/src/main/cpp/ewj_android.cpp`: touch feeds an SDL virtual gamepad.
+- `app/src/main/cpp/CMakeLists.txt`: game mode when `generated/` exists, stub otherwise.
+- `tools/fetch-sdl-java.sh`: SDL 3.5.0 Java glue (zlib), matching the SDK's SDL.
+- `tools/stage-sdk.sh`: ReXGlue runtime libraries and libc++ into `app/libs/`.
+- `sdk-patches/rexglue-android/`: the Android patches for ReXGlue (GPL-3.0).
 
-Implicaciones:
-- arm64-v8a únicamente (configurado en app/build.gradle.kts).
-- minSdk 29 (Android 10+).
-- No usa el driver Turnip de Adreno. En Mali se usa el driver Vulkan del
-  sistema. El port de referencia (UnleashedRecomp-Android) lo marca como
-  experimental, con texturas BC decodificadas en CPU por falta de soporte.
-- Pantalla 19.5:9: AspectViewport calcula un 16:9 centrado sin estirar.
+## Build
+- Public (no game): `.github/workflows/android.yml`, artifact `EarthwormJimHD-debug-apk`.
+- With the game: `build-game-apk.yml` in the private repo, which runs codegen and
+  copies `generated/` into `app/src/main/cpp/generated/`.
 
-## Controles
-Según la captura de referencia: stick virtual abajo a la izquierda,
-botones A/B/X a la derecha y pausa arriba a la derecha. Los botones
-llevan bits en Pad.kt; hay que confirmar el mapeo contra el input real
-del juego antes de usarlo.
+## Game data (not in the APK)
+Copy your extracted game folder (the one with `default.xex`) to the device:
 
-## Archivos
-- settings.gradle.kts, build.gradle.kts: proyecto Gradle (AGP 8.7.3, Kotlin 2.0.21).
-- app/build.gradle.kts: applicationId com.ewj.hd, arm64-v8a, CMake.
-- app/src/main/AndroidManifest.xml: landscape sensor, fullscreen, sin recorte en punch-hole.
-- app/src/main/java/com/ewj/hd/: MainActivity, TouchOverlay, NativeBridge, AspectViewport.
-- app/src/main/cpp/: stub nativo con JNI (start, stop, setPad, setViewport, setPause).
+```sh
+G=/sdcard/Android/data/com.ewj.hd/files/game
+adb install -r app-debug.apk
+adb shell mkdir -p $G
+adb push game/. $G/
+adb shell "find $G -type d -exec chmod 777 {} +"
+```
 
-## Compilar con GitHub Actions
-El workflow `.github/workflows/android.yml` compila el APK en cada push,
-pull request o desde la pestaña Actions (workflow_dispatch). El APK aparece
-como artifact "EarthwormJimHD-debug-apk". No hace falta Android Studio.
-Usa JDK 17, NDK 27.0.12077973 y CMake 3.22.1, igual que `app/build.gradle.kts`.
+The runtime log is `/sdcard/Android/data/com.ewj.hd/files/rayman.log` (the SDK
+patch names it after Rayman; it is the same log).
 
-## Pendiente
-1. Primera ejecución del workflow: el fallo de setup-android ya se corrigió (se usa sdkmanager del runner).
-2. Motor: el workflow `rexglue-android-sdk.yml` compila ReXGlue v0.10.0 con los parches de Rayman
-   (`sdk-patches/rexglue-android/`, GPL-3.0) para arm64. Falta verificar el primer build y enlazarlo en CMakeLists.txt.
-3. Datos del juego: el paquete XBLA del usuario, instalado en el almacenamiento de la app.
-4. Icono: ya usa el icono de la captura del XBLA (mipmap-*/ic_launcher.png).
-5. Prueba en el Poco X8 Pro Max con log de Logcat.
+## Status
+- Control overlay: shown on the phone (verified on the Poco).
+- Game: pending first run with generated code.
 
-## Verificación
-Este scaffold se escribió sin poder compilarlo en el entorno: no hay SDK
-ni NDK disponibles. La primera compilación real ocurre en GitHub Actions.
-
-## Licencia
-GPL-3.0 (ver `LICENSE`). Incluye los parches de ReXGlue para Android de
-RaymanOriginsRecomp (GPL-3.0), en `sdk-patches/rexglue-android/`. ReXGlue
-v0.10.0 es BSD-3-Clause. El juego no está incluido: se requiere una copia propia.
+## License
+GPL-3.0 (see `LICENSE`). Includes the GPL-3.0 ReXGlue Android patches. ReXGlue
+v0.10.0 is BSD-3-Clause. SDL is zlib. The game is not included.
