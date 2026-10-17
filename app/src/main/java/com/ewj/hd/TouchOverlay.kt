@@ -5,7 +5,6 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.view.MotionEvent
 import android.view.View
-import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sqrt
 
@@ -76,12 +75,19 @@ class TouchOverlay(context: Context) : View(context) {
         }
     }
 
+    // kotlin.math.hypot only takes Double; this keeps the math in Float.
+    private fun dist(ax: Float, ay: Float, bx: Float, by: Float): Float {
+        val dx = ax - bx
+        val dy = ay - by
+        return sqrt(dx * dx + dy * dy)
+    }
+
     private fun buttonAt(x: Float, y: Float): ActionButton? =
-        actionButtons.firstOrNull { hypot(x - it.cx, y - it.cy) <= btnR * 1.1f }
+        actionButtons.firstOrNull { dist(x, y, it.cx, it.cy) <= btnR * 1.1f }
 
-    private fun inStick(x: Float, y: Float) = hypot(x - stickCx, y - stickCy) <= stickR * 1.6f
+    private fun inStick(x: Float, y: Float) = dist(x, y, stickCx, stickCy) <= stickR * 1.6f
 
-    private fun inPause(x: Float, y: Float) = hypot(x - pauseCx, y - pauseCy) <= pauseR * 1.5f
+    private fun inPause(x: Float, y: Float) = dist(x, y, pauseCx, pauseCy) <= pauseR * 1.5f
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
