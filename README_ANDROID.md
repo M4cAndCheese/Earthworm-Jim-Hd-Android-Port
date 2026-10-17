@@ -37,8 +37,8 @@ Usa JDK 17, NDK 27.0.12077973 y CMake 3.22.1, igual que `app/build.gradle.kts`.
 
 ## Pendiente
 1. Primera ejecución del workflow: el fallo de setup-android ya se corrigió (se usa sdkmanager del runner).
-2. Motor: compilar ReXGlue para Android NDK y enlazarlo en CMakeLists.txt.
-   Hoy no hay una versión verificada de ReXGlue para Android.
+2. Motor: el workflow `rexglue-android-sdk.yml` compila ReXGlue v0.10.0 con los parches de Rayman
+   (`sdk-patches/rexglue-android/`, GPL-3.0) para arm64. Falta verificar el primer build y enlazarlo en CMakeLists.txt.
 3. Datos del juego: el paquete XBLA del usuario, instalado en el almacenamiento de la app.
 4. Icono: ya usa el icono de la captura del XBLA (mipmap-*/ic_launcher.png).
 5. Prueba en el Poco X8 Pro Max con log de Logcat.

@@ -1,0 +1,67 @@
+name: ReXGlue SDK for Android
+
+# Builds the ReXGlue SDK (v0.10.0 + Android patches) for arm64-v8a and uploads
+# it as an artifact. The EWJ APK workflow does not depend on this job yet.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "sdk-patches/**"
+      - ".github/workflows/rexglue-android-sdk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  sdk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout EWJ
+        uses: actions/checkout@v5
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+          cmake --version
+
+      - name: Install NDK 28.2.13676358
+        run: |
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "ndk;28.2.13676358"
+
+      - name: Clone ReXGlue v0.10.0
+        run: |
+          git clone --recurse-submodules --branch v0.10.0 \
+            https://github.com/rexglue/rexglue-sdk.git rexglue-src
+
+      - name: Apply Android patches
+        run: |
+          git config --global user.name "ewj-ci"
+          git config --global user.email "ewj-ci@users.noreply.github.com"
+          git -C rexglue-src am "$GITHUB_WORKSPACE"/sdk-patches/rexglue-android/*.patch
+
+      - name: Configure for android-arm64
+        run: |
+          NDK="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
+          cmake -S rexglue-src -B rexglue-src/out/android-arm64 -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 -DANDROID_STL=c++_shared \
+            -DCMAKE_BUILD_TYPE=Release -DREXGLUE_ENABLE_TRACY=OFF \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/sdk-install"
+
+      - name: Build
+        run: cmake --build rexglue-src/out/android-arm64 --parallel
+
+      - name: Install
+        run: cmake --install rexglue-src/out/android-arm64
+
+      - name: Upload SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rexglue-android-arm64-sdk
+          path: sdk-install/
+          if-no-files-found: error
