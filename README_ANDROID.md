@@ -8,7 +8,7 @@ on the Poco X8 Pro Max (Mali-G925).
 - `app/src/main/java/com/ewj/hd/TouchOverlay.kt`: on-screen stick and buttons.
 - `app/src/main/cpp/ewj_android.cpp`: touch feeds an SDL virtual gamepad.
 - `app/src/main/cpp/CMakeLists.txt`: game mode when `generated/` exists, stub otherwise.
-- `tools/fetch-sdl-java.sh`: SDL 3.5.0 Java glue (zlib), matching the SDK's SDL.
+- `tools/fetch-sdl-java.sh`: SDL Java glue (zlib) for the exact SDL commit the SDK is built with (tools/fetch-sdl-java.sh).
 - `tools/stage-sdk.sh`: ReXGlue runtime libraries and libc++ into `app/libs/`.
 - `sdk-patches/rexglue-android/`: the Android patches for ReXGlue (GPL-3.0).
 

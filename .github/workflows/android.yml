@@ -34,7 +34,7 @@ jobs:
             "platforms;android-35" "build-tools;35.0.0" \
             "ndk;28.2.13676358" "cmake;3.31.6"
 
-      - name: Fetch SDL 3.5.0 Java glue
+      - name: Fetch SDL Java glue (SDK commit)
         run: sh tools/fetch-sdl-java.sh
 
       - name: Fetch ReXGlue Android SDK
