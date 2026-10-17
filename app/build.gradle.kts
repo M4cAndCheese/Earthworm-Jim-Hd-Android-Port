@@ -46,11 +46,6 @@ android {
         }
     }
 
-    // ReXGlue runtime libraries, staged by tools/stage-sdk.sh.
-    sourceSets.main {
-        jniLibs.srcDir("libs")
-    }
-
     packaging {
         // The runtime finds its GPU plugin next to librexruntime.so and dlopens it by path.
         jniLibs {
@@ -66,3 +61,6 @@ android {
         jvmToolchain(17)
     }
 }
+
+// ReXGlue runtime libraries, staged by tools/stage-sdk.sh.
+android.sourceSets.getByName("main").jniLibs.srcDir("libs")
