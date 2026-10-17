@@ -25,7 +25,6 @@ class MainActivity : Activity() {
             layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
-        hideSystemBars()
 
         val root = FrameLayout(this)
         surfaceView = SurfaceView(this)
@@ -51,6 +50,13 @@ class MainActivity : Activity() {
                 NativeBridge.stop()
             }
         })
+    }
+
+    // The window's insets controller is only available once the window has focus.
+    // Calling it from onCreate crashes with a NullPointerException on some devices.
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemBars()
     }
 
     private fun hideSystemBars() {
