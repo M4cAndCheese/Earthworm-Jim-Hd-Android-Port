@@ -38,3 +38,10 @@ patch names it after Rayman; it is the same log).
 ## License
 GPL-3.0 (see `LICENSE`). Includes the GPL-3.0 ReXGlue Android patches. ReXGlue
 v0.10.0 is BSD-3-Clause. SDL is zlib. The game is not included.
+
+## Build time
+The game build is dominated by compiling the generated game code (about 480 files
+and ~140k small functions, from `ewj/veneer_funcs.toml`). The private workflow
+restores a ccache cache keyed by the TOML files, so a rebuild with unchanged
+codegen reuses the compiled objects. The first build after a TOML change is the
+slow one.
