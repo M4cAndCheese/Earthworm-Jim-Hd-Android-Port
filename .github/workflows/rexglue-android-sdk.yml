@@ -66,42 +66,28 @@ jobs:
           path: sdk-install/
           if-no-files-found: error
 
-  # Host SDK (Linux x86_64, upstream v0.10.0, no Android patches).
-  # The Android build's bin/rexglue is an aarch64 Android binary, so the codegen
-  # that turns default.xex into C++ needs this one, built for the runner.
+  # Host SDK: the official ReXGlue v0.10.0 Linux x86_64 build from its releases page.
+  # Replaces building LLVM 20 + the SDK ourselves, which failed in CI. The Android
+  # bin/rexglue is aarch64, so codegen needs this host binary.
   host-sdk:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
 
     steps:
-      - name: Install build tools
+      - name: Download official ReXGlue v0.10.0 (linux-amd64)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build libasound2-dev libpulse-dev \
-            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
-            libwayland-dev libxkbcommon-dev libdbus-1-dev libudev-dev
-          wget -q https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 20
-          cmake --version
+          URL="https://github.com/rexglue/rexglue-sdk/releases/download/v0.10.0/rexglue-sdk-0.10.0-linux-amd64.zip"
+          curl -fL -o rexglue-linux.zip "$URL"
+          mkdir host-install
+          unzip -q rexglue-linux.zip -d host-install
+          find host-install -maxdepth 3 -name rexglue -type f | head -n 5
 
-      - name: Clone ReXGlue v0.10.0
+      - name: Check the host binary runs
         run: |
-          git clone --recurse-submodules --branch v0.10.0 \
-            https://github.com/rexglue/rexglue-sdk.git rexglue-src
-
-      - name: Configure for linux-x86_64
-        run: |
-          cmake -S rexglue-src -B rexglue-src/out/host -G Ninja \
-            -DCMAKE_C_COMPILER=clang-20 -DCMAKE_CXX_COMPILER=clang++-20 \
-            -DCMAKE_BUILD_TYPE=Release -DREXGLUE_ENABLE_TRACY=OFF \
-            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/host-install"
-
-      - name: Build
-        run: cmake --build rexglue-src/out/host --parallel
-
-      - name: Install
-        run: cmake --install rexglue-src/out/host
+          BIN=$(find host-install -name rexglue -type f | head -n 1)
+          chmod +x "$BIN"
+          file "$BIN"
+          "$BIN" --help 2>&1 | head -n 20 || true
 
       - name: Upload host SDK
         uses: actions/upload-artifact@v4
