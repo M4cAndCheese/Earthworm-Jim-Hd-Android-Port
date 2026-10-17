@@ -21,7 +21,6 @@ std::mutex g_mutex;
 
 #if defined(EWJ_HAS_SDK)
 SDL_Joystick* g_pad = nullptr;
-SDL_JoystickID g_pad_id = 0;
 
 // Must hold g_mutex. The joystick subsystem is started by the runtime, so the pad
 // is attached lazily, once SDL is up.
@@ -47,7 +46,6 @@ bool EnsurePad() {
     SDL_DetachVirtualJoystick(id);
     return false;
   }
-  g_pad_id = id;
   return true;
 }
 

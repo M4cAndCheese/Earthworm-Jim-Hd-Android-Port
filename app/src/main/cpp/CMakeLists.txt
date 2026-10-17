@@ -4,6 +4,16 @@ project(ewj_native LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# ccache: the generated game code (~480 files, ~140k functions) is the bulk of the
+# build and is identical between runs unless the TOML files change. With a cache
+# restored by CI, unchanged objects are reused instead of recompiled.
+find_program(EWJ_CCACHE ccache)
+if(EWJ_CCACHE)
+  set(CMAKE_C_COMPILER_LAUNCHER "${EWJ_CCACHE}")
+  set(CMAKE_CXX_COMPILER_LAUNCHER "${EWJ_CCACHE}")
+  message(STATUS "ccache enabled: ${EWJ_CCACHE}")
+endif()
+
 # ReXGlue Android SDK: the artifact rexglue-android-arm64-sdk (release sdk-rexglue-0.10.0).
 set(EWJ_SDK_DIR "" CACHE PATH "ReXGlue Android SDK install prefix (contains lib/cmake/rexglue)")
 if(EWJ_SDK_DIR)
@@ -18,6 +28,14 @@ if(NOT EXISTS "${EWJ_GENERATED_DIR}/default/sources.cmake")
     target_link_libraries(ewj PRIVATE log android)
     return()
 endif()
+
+if(EWJ_SDK_DIR)
+    list(APPEND CMAKE_FIND_ROOT_PATH "${EWJ_SDK_DIR}")
+    if(EXISTS "${EWJ_SDK_DIR}/lib/cmake/rexglue/rexglueConfig.cmake")
+        set(rexglue_DIR "${EWJ_SDK_DIR}/lib/cmake/rexglue" CACHE PATH "ReXGlue SDK config dir")
+    endif()
+endif()
+find_package(rexglue 0.10.0 CONFIG)
 
 include("${EWJ_GENERATED_DIR}/rexglue.cmake")
 include("${EWJ_GENERATED_DIR}/default/sources.cmake")
