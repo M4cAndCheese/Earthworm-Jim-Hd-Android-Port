@@ -46,3 +46,8 @@ Usa JDK 17, NDK 27.0.12077973 y CMake 3.22.1, igual que `app/build.gradle.kts`.
 ## Verificación
 Este scaffold se escribió sin poder compilarlo en el entorno: no hay SDK
 ni NDK disponibles. La primera compilación real ocurre en GitHub Actions.
+
+## Licencia
+GPL-3.0 (ver `LICENSE`). Incluye los parches de ReXGlue para Android de
+RaymanOriginsRecomp (GPL-3.0), en `sdk-patches/rexglue-android/`. ReXGlue
+v0.10.0 es BSD-3-Clause. El juego no está incluido: se requiere una copia propia.
